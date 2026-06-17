@@ -5,7 +5,70 @@ const cors = require('cors');
 const { Server: SocketServer } = require('socket.io');
 const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
-const RaceEngine = require('./engine/raceEngine');
+const EventEmitter = require('events');
+
+// Try to load the real RaceEngine; if it fails, provide a safe fallback so races always work
+let RaceEngine;
+try {
+  RaceEngine = require('./engine/raceEngine');
+  console.log('[Server] Loaded engine/raceEngine');
+} catch (e) {
+  console.warn('[Server] Failed to load engine/raceEngine, using fallback engine. Error:', String(e));
+
+  // Minimal fallback RaceEngine implementation that simulates laps/events
+  RaceEngine = class FallbackRaceEngine extends EventEmitter {
+    constructor(cars = [], laps = 10, seed = Date.now()) {
+      super();
+      this.cars = JSON.parse(JSON.stringify(cars));
+      this.laps = laps;
+      this.currentLap = 0;
+      this.interval = null;
+      this.seed = seed;
+    }
+
+    start() {
+      if (this.interval) return;
+      this.interval = setInterval(() => {
+        this.currentLap += 1;
+        // simple deterministic-ish movement
+        this.cars.forEach((c, idx) => {
+          // reduce reliability slowly
+          c.currentReliability = Math.max(0, (c.currentReliability || c.reliability || 80) - Math.random() * 1.5);
+          // random status
+          if (Math.random() < 0.02) c.status = 'retired';
+        });
+        // sort by reliability as a simple proxy for position
+        this.cars.sort((a, b) => (b.currentReliability || 0) - (a.currentReliability || 0));
+        this.cars.forEach((c, i) => c.position = i + 1);
+
+        this.emit('lap', { lap: this.currentLap, cars: this.cars.map(c => ({ id: c.id, team: c.team, position: c.position, reliability: Math.round(c.currentReliability), status: c.status })) });
+
+        // occasional event
+        if (Math.random() < 0.25) {
+          const idx = Math.floor(Math.random() * this.cars.length);
+          const event = { lap: this.currentLap, team: this.cars[idx].team, type: Math.random() < 0.5 ? 'Overtake' : 'Mechanical' };
+          this.emit('event', event);
+        }
+
+        if (this.currentLap >= this.laps) {
+          clearInterval(this.interval);
+          this.interval = null;
+          this.emit('end', { cars: this.cars.map(c => ({ id: c.id, team: c.team, position: c.position, reliability: Math.round(c.currentReliability), status: c.status })) });
+        }
+      }, 1200);
+    }
+
+    applyDecision(decision) {
+      // decisions slightly affect all cars as a demo
+      if (!decision) return;
+      this.cars.forEach(c => {
+        if (decision === 'push') c.currentReliability = Math.max(0, (c.currentReliability || 80) - Math.random() * 2 - 1);
+        if (decision === 'conserve') c.currentReliability = Math.min(100, (c.currentReliability || 80) + Math.random() * 0.8);
+        if (decision === 'pit' && Math.random() < 0.9) c.status = 'pitting';
+      });
+    }
+  };
+}
 
 // HOTFIX: This server runs entirely in-memory (no Prisma/@prisma/client required)
 // Ensures the service starts reliably on Render free instances without running prisma generate
@@ -30,7 +93,8 @@ app.use(express.static(path.join(__dirname, '../public')));
 
 // Middleware
 function verifyToken(req, res, next) {
-  const token = req.headers.authorization?.split(' ')[1];
+  const header = req.headers.authorization || '';
+  const token = header.split(' ')[1];
   if (!token) return res.status(401).json({ error: 'No token' });
   try {
     const payload = jwt.verify(token, JWT_SECRET);
@@ -38,6 +102,7 @@ function verifyToken(req, res, next) {
     req.userEmail = payload.email;
     next();
   } catch (e) {
+    console.warn('Token verify failed', String(e));
     res.status(401).json({ error: 'Invalid token' });
   }
 }
@@ -67,7 +132,7 @@ app.post('/api/auth/register', async (req, res) => {
     res.json({ token, user: { id: user.id, email: user.email, language: user.language } });
   } catch (e) {
     console.error('Register error:', e);
-    res.status(500).json({ error: 'Registration failed' });
+    res.status(500).json({ error: 'Registration failed', detail: String(e) });
   }
 });
 
@@ -84,7 +149,7 @@ app.post('/api/auth/login', async (req, res) => {
     res.json({ token, user: { id: user.id, email: user.email, language: user.language } });
   } catch (e) {
     console.error('Login error:', e);
-    res.status(500).json({ error: 'Login failed' });
+    res.status(500).json({ error: 'Login failed', detail: String(e) });
   }
 });
 
@@ -113,7 +178,7 @@ app.post('/api/team/create', verifyToken, (req, res) => {
 
     res.json({ team, car });
   } catch (e) {
-    res.status(500).json({ error: 'Failed to create team' });
+    res.status(500).json({ error: 'Failed to create team', detail: String(e) });
   }
 });
 
@@ -122,13 +187,14 @@ app.get('/api/team/:userId', (req, res) => {
     const userTeams = teams.filter(t => t.userId === req.params.userId);
     res.json({ teams: userTeams });
   } catch (e) {
-    res.status(500).json({ error: 'Failed to fetch teams' });
+    res.status(500).json({ error: 'Failed to fetch teams', detail: String(e) });
   }
 });
 
 // ========== RACE ROUTES (in-memory) ==========
 app.post('/api/race/start', verifyToken, (req, res) => {
   try {
+    console.log('[Race start] incoming body:', JSON.stringify(req.body));
     const { carId: providedCarId, circuitName, year } = req.body || {};
     const userId = req.userId;
 
@@ -182,6 +248,11 @@ app.post('/api/race/start', verifyToken, (req, res) => {
     console.error('Race start error:', e);
     res.status(500).json({ error: 'Failed to start race', detail: String(e) });
   }
+});
+
+app.get('/debug/active-races', (req, res) => {
+  const list = Array.from(activeRaces.entries()).map(([id, v]) => ({ id, userId: v.userId, carId: v.carId, circuitName: v.circuitName }));
+  res.json({ count: list.length, races: list });
 });
 
 app.post('/api/race/:raceId/decision', verifyToken, (req, res) => {
