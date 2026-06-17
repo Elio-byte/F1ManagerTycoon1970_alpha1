@@ -10,7 +10,18 @@ const EventEmitter = require('events');
 // Try to load the real RaceEngine; if it fails, provide a safe fallback so races always work
 let RaceEngine;
 try {
-  RaceEngine = require('./engine/raceEngine');
+  // Normalize possible export shapes (CommonJS function, default export, named export)
+  const mod = require('./engine/raceEngine');
+  if (typeof mod === 'function') {
+    RaceEngine = mod;
+  } else if (mod && typeof mod.default === 'function') {
+    RaceEngine = mod.default;
+  } else if (mod && typeof mod.RaceEngine === 'function') {
+    RaceEngine = mod.RaceEngine;
+  } else {
+    // If it's not a constructor, throw to trigger fallback
+    throw new TypeError('Loaded raceEngine module is not a constructor');
+  }
   console.log('[Server] Loaded engine/raceEngine');
 } catch (e) {
   console.warn('[Server] Failed to load engine/raceEngine, using fallback engine. Error:', String(e));
@@ -86,6 +97,28 @@ const JWT_SECRET = process.env.JWT_SECRET || 'dev_secret_change_in_production';
 const users = [];
 const teams = [];
 const activeRaces = new Map();
+
+// Debug: capture last server error (monkey-patch console.error and listen for unhandled errors)
+let lastError = null;
+const _origConsoleError = console.error.bind(console);
+console.error = (...args) => {
+  try {
+    // prefer stack if present
+    const message = args.map(a => (a && a.stack) ? a.stack : String(a)).join(' ');
+    lastError = { message, ts: new Date().toISOString() };
+  } catch (e) {
+    // ignore
+  }
+  _origConsoleError(...args);
+};
+process.on('unhandledRejection', (reason) => {
+  lastError = { message: String(reason), ts: new Date().toISOString() };
+  _origConsoleError('UnhandledRejection', reason);
+});
+process.on('uncaughtException', (err) => {
+  lastError = { message: (err && err.stack) ? err.stack : String(err), ts: new Date().toISOString() };
+  _origConsoleError('UncaughtException', err);
+});
 
 app.use(cors());
 app.use(express.json());
@@ -178,6 +211,7 @@ app.post('/api/team/create', verifyToken, (req, res) => {
 
     res.json({ team, car });
   } catch (e) {
+    console.error('Create team error:', e);
     res.status(500).json({ error: 'Failed to create team', detail: String(e) });
   }
 });
@@ -187,6 +221,7 @@ app.get('/api/team/:userId', (req, res) => {
     const userTeams = teams.filter(t => t.userId === req.params.userId);
     res.json({ teams: userTeams });
   } catch (e) {
+    console.error('Get teams error:', e);
     res.status(500).json({ error: 'Failed to fetch teams', detail: String(e) });
   }
 });
@@ -273,6 +308,16 @@ app.get('/api/race/:raceId/status', (req, res) => {
 app.get('/debug/active-races', (req, res) => {
   const list = Array.from(activeRaces.entries()).map(([id, v]) => ({ id, userId: v.userId, carId: v.carId, circuitName: v.circuitName }));
   res.json({ count: list.length, races: list });
+});
+
+// New debug endpoint: last server error
+app.get('/debug/last-error', (req, res) => {
+  try {
+    res.json({ lastError, activeRaces: activeRaces.size, ts: new Date().toISOString() });
+  } catch (e) {
+    console.error('debug/last-error failed', e);
+    res.status(500).json({ error: 'failed', detail: String(e) });
+  }
 });
 
 app.post('/api/race/:raceId/decision', verifyToken, (req, res) => {
