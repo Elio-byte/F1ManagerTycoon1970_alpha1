@@ -1,6 +1,6 @@
-import { EventEmitter } from 'events';
+const { EventEmitter } = require('events');
 
-export class RaceEngine extends EventEmitter {
+class RaceEngine extends EventEmitter {
   constructor(cars, lapCount, seed) {
     super();
     this.cars = JSON.parse(JSON.stringify(cars));
@@ -109,3 +109,5 @@ export class RaceEngine extends EventEmitter {
     };
   }
 }
+
+module.exports = { RaceEngine };

@@ -1,9 +1,9 @@
-import { RaceEngine } from '../engine/raceEngine.js';
-import { verifyToken } from '../middleware/auth.js';
+const { RaceEngine } = require('../engine/raceEngine');
+const { verifyToken } = require('../middleware/auth');
 
 const activeRaces = new Map();
 
-export function raceRoutes(app, io) {
+module.exports = function raceRoutes(app, io) {
   const prisma = app.locals.prisma;
 
   app.post('/api/race/start', verifyToken, async (req, res) => {
@@ -22,14 +22,29 @@ export function raceRoutes(app, io) {
 
       let circuit = await prisma.circuit.findUnique({
         where: { name: circuitName }
-      });
+      }).catch(() => null);
 
       if (!circuit) {
-        circuit = await createDefaultCircuit(circuitName, year);
+        circuit = await prisma.circuit.create({
+          data: {
+            name: circuitName,
+            year: year || 1975,
+            laps: 20,
+            lengthKm: 5.0,
+            svgPath: 'M20 100 Q 200 20 400 100 T 980 100'
+          }
+        }).catch(e => {
+          console.error('Circuit creation error:', e);
+          return null;
+        });
       }
 
-      const season = await prisma.season.findFirst({ where: { year } }) ||
-        await prisma.season.create({ data: { year } });
+      if (!circuit) return res.status(500).json({ error: 'Failed to create circuit' });
+
+      let season = await prisma.season.findFirst({ where: { year: year || 1975 } }).catch(() => null);
+      if (!season) {
+        season = await prisma.season.create({ data: { year: year || 1975 } });
+      }
 
       const race = await prisma.race.create({
         data: {
@@ -71,8 +86,8 @@ export function raceRoutes(app, io) {
       engine.start();
       res.json({ raceId: race.id, circuitName: circuit.name, laps: circuit.laps });
     } catch (e) {
-      console.error(e);
-      res.status(500).json({ error: 'Failed to start race' });
+      console.error('Race start error:', e);
+      res.status(500).json({ error: 'Failed to start race: ' + e.message });
     }
   });
 
@@ -86,61 +101,59 @@ export function raceRoutes(app, io) {
       res.status(404).json({ error: 'Race not found' });
     }
   });
-}
+};
 
 async function generateAITeams(prisma, count) {
   const aiNames = [
-    'Ferrari AI', 'McLaren AI', 'Lotus AI', 'Tyrrell AI', 'Brabham AI',
-    'Williams AI', 'Renault AI', 'March AI', 'Surtees AI', 'Shadow AI'
+    'Ferrari', 'McLaren', 'Lotus', 'Tyrrell', 'Brabham',
+    'Williams', 'Renault', 'March', 'Surtees', 'Shadow'
   ];
   const teams = [];
   for (let i = 0; i < count; i++) {
-    const team = await prisma.team.create({
-      data: {
-        name: aiNames[i % aiNames.length] + ' ' + Date.now(),
-        colorPrimary: '#' + Math.floor(Math.random() * 16777215).toString(16),
-        colorSecondary: '#FFFFFF',
-        userId: 'ai-' + i
-      }
-    });
-    const car = await prisma.car.create({
-      data: {
-        teamId: team.id,
-        year: 1975,
-        currentReliability: Math.floor(Math.random() * 15) + 75
-      }
-    });
-    teams.push({ ...team, cars: [car] });
+    try {
+      const team = await prisma.team.create({
+        data: {
+          name: aiNames[i % aiNames.length] + ' (AI)',
+          colorPrimary: '#' + Math.floor(Math.random() * 16777215).toString(16),
+          colorSecondary: '#FFFFFF',
+          userId: 'ai-' + Date.now() + '-' + i
+        }
+      });
+      const car = await prisma.car.create({
+        data: {
+          teamId: team.id,
+          year: 1975,
+          currentReliability: Math.floor(Math.random() * 15) + 75
+        }
+      });
+      teams.push({ ...team, cars: [car] });
+    } catch (e) {
+      console.error('AI team creation error:', e);
+    }
   }
   return teams;
 }
 
-async function createDefaultCircuit(name, year) {
-  return await app.locals.prisma.circuit.create({
-    data: {
-      name,
-      year,
-      laps: 20,
-      lengthKm: 5.0,
-      svgPath: 'M20 100 Q 200 20 400 100 T 980 100'
-    }
-  });
-}
-
 async function saveRaceResults(prisma, raceId, userId, carId, result) {
-  for (const car of result.cars) {
-    await prisma.raceResult.create({
-      data: {
-        raceId,
-        carId: car.id === 'player-car' ? carId : car.id,
-        userId: car.id === 'player-car' ? userId : 'ai-driver',
-        finishingPosition: car.position,
-        points: calculatePoints(car.position),
-        finalReliability: car.currentReliability,
-        retired: car.status === 'retired',
-        retirementReason: car.retirementReason
-      }
-    });
+  for (let i = 0; i < result.cars.length; i++) {
+    const car = result.cars[i];
+    try {
+      await prisma.raceResult.create({
+        data: {
+          raceId,
+          carId: car.id,
+          userId: car.id === carId ? userId : 'ai-driver',
+          startingPosition: i + 1,
+          finishingPosition: i + 1,
+          points: calculatePoints(i + 1),
+          finalReliability: Math.max(0, Math.round(car.currentReliability)),
+          retired: car.status === 'retired',
+          retirementReason: car.retirementReason || null
+        }
+      });
+    } catch (e) {
+      console.error('Save race result error:', e);
+    }
   }
 }
 

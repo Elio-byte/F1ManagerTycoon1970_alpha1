@@ -1,6 +1,6 @@
-import { verifyToken } from '../middleware/auth.js';
+const { verifyToken } = require('../middleware/auth');
 
-export function teamRoutes(app) {
+module.exports = function teamRoutes(app) {
   const prisma = app.locals.prisma;
 
   app.post('/api/team/create', verifyToken, async (req, res) => {
@@ -28,7 +28,7 @@ export function teamRoutes(app) {
       res.json({ team, car });
     } catch (e) {
       console.error(e);
-      res.status(500).json({ error: 'Failed to create team' });
+      res.status(500).json({ error: 'Failed to create team: ' + e.message });
     }
   });
 
@@ -43,4 +43,4 @@ export function teamRoutes(app) {
       res.status(500).json({ error: 'Failed to fetch teams' });
     }
   });
-}
+};
