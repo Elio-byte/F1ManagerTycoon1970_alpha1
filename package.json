@@ -1,19 +1,15 @@
 {
   "name": "f1managertycoon1970-alpha",
-  "version": "0.2.0",
-  "description": "F1 Manager Tycoon 1970 - Full Game Alpha",
+  "version": "0.4.0",
+  "description": "F1 Manager Tycoon 1970 - Full Game Alpha (In-Memory, Hotfix)",
   "main": "server/index.js",
   "scripts": {
-    "dev": "node server/index.js",
     "start": "node server/index.js",
-    "build": "npm run prisma:generate",
-    "prisma:generate": "prisma generate",
-    "prisma:deploy": "prisma migrate deploy"
+    "dev": "node server/index.js"
   },
   "author": "Elio-byte",
   "license": "MIT",
   "dependencies": {
-    "@prisma/client": "^5.3.0",
     "bcrypt": "^5.1.0",
     "cors": "^2.8.5",
     "express": "^4.18.2",
