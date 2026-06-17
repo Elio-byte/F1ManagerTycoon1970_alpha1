@@ -6,6 +6,11 @@ const activeRaces = new Map();
 module.exports = function raceRoutes(app, io) {
   const prisma = app.locals.prisma;
 
+  if (!prisma) {
+    console.warn('Prisma not available - race routes disabled');
+    return;
+  }
+
   app.post('/api/race/start', verifyToken, async (req, res) => {
     try {
       const { carId, circuitName, year } = req.body;
@@ -33,13 +38,8 @@ module.exports = function raceRoutes(app, io) {
             lengthKm: 5.0,
             svgPath: 'M20 100 Q 200 20 400 100 T 980 100'
           }
-        }).catch(e => {
-          console.error('Circuit creation error:', e);
-          return null;
         });
       }
-
-      if (!circuit) return res.status(500).json({ error: 'Failed to create circuit' });
 
       let season = await prisma.season.findFirst({ where: { year: year || 1975 } }).catch(() => null);
       if (!season) {
@@ -128,7 +128,7 @@ async function generateAITeams(prisma, count) {
       });
       teams.push({ ...team, cars: [car] });
     } catch (e) {
-      console.error('AI team creation error:', e);
+      console.error('AI team error:', e.message);
     }
   }
   return teams;
@@ -152,7 +152,7 @@ async function saveRaceResults(prisma, raceId, userId, carId, result) {
         }
       });
     } catch (e) {
-      console.error('Save race result error:', e);
+      console.error('Save result error:', e.message);
     }
   }
 }

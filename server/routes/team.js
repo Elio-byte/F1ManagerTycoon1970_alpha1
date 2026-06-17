@@ -3,6 +3,11 @@ const { verifyToken } = require('../middleware/auth');
 module.exports = function teamRoutes(app) {
   const prisma = app.locals.prisma;
 
+  if (!prisma) {
+    console.warn('Prisma not available - team routes disabled');
+    return;
+  }
+
   app.post('/api/team/create', verifyToken, async (req, res) => {
     try {
       const { name, colorPrimary, colorSecondary, year } = req.body;
@@ -27,7 +32,7 @@ module.exports = function teamRoutes(app) {
 
       res.json({ team, car });
     } catch (e) {
-      console.error(e);
+      console.error('Team creation error:', e);
       res.status(500).json({ error: 'Failed to create team: ' + e.message });
     }
   });

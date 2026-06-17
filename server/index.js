@@ -4,9 +4,16 @@ const path = require('path');
 const cors = require('cors');
 const { Server: SocketServer } = require('socket.io');
 const bodyParser = require('body-parser');
-const { PrismaClient } = require('@prisma/client');
 
-const prisma = new PrismaClient();
+let prisma = null;
+
+try {
+  const { PrismaClient } = require('@prisma/client');
+  prisma = new PrismaClient();
+} catch (e) {
+  console.error('Prisma error:', e.message);
+}
+
 const app = express();
 const server = http.createServer(app);
 const io = new SocketServer(server, {
@@ -26,9 +33,16 @@ app.locals.jwt_secret = JWT_SECRET;
 app.locals.io = io;
 
 // Routes
-require('./routes/auth')(app);
-require('./routes/team')(app);
-require('./routes/race')(app, io);
+if (prisma) {
+  require('./routes/auth')(app);
+  require('./routes/team')(app);
+  require('./routes/race')(app, io);
+}
+
+// Health check
+app.get('/health', (req, res) => {
+  res.json({ status: 'ok', timestamp: new Date().toISOString() });
+});
 
 io.on('connection', (socket) => {
   console.log('[Socket] Client connected:', socket.id);
@@ -40,6 +54,8 @@ server.listen(PORT, () => {
 });
 
 process.on('SIGTERM', async () => {
-  await prisma.$disconnect();
+  if (prisma) {
+    await prisma.$disconnect();
+  }
   process.exit(0);
 });
