@@ -129,51 +129,79 @@ app.get('/api/team/:userId', (req, res) => {
 // ========== RACE ROUTES (in-memory) ==========
 app.post('/api/race/start', verifyToken, (req, res) => {
   try {
-    const { carId, circuitName, year } = req.body;
+    const { carId: providedCarId, circuitName, year } = req.body || {};
     const userId = req.userId;
 
     const raceId = 'race_' + Date.now() + '_' + Math.random().toString(36).slice(2);
 
-    // Simple demo cars (player + 3 AI)
+    // If no carId provided, create a temporary player car id so server logic doesn't break
+    const playerCarId = providedCarId || 'player_' + raceId;
+
+    // Simple demo cars (player + 3 AI). Player car uses playerCarId.
     const demoCars = [
-      { id: carId, team: 'Player Team', currentReliability: 85, aggression: 0.5, status: 'running' },
-      { id: 'ai_1_' + raceId, team: 'Ferrari AI', currentReliability: 82, aggression: 0.6, status: 'running' },
-      { id: 'ai_2_' + raceId, team: 'McLaren AI', currentReliability: 80, aggression: 0.55, status: 'running' },
-      { id: 'ai_3_' + raceId, team: 'Lotus AI', currentReliability: 78, aggression: 0.7, status: 'running' }
+      { id: playerCarId, team: 'Player Team', position: 1, reliability: 85, currentReliability: 85, aggression: 0.5, status: 'running' },
+      { id: 'ai_1_' + raceId, team: 'Ferrari AI', position: 2, reliability: 82, currentReliability: 82, aggression: 0.6, status: 'running' },
+      { id: 'ai_2_' + raceId, team: 'McLaren AI', position: 3, reliability: 80, currentReliability: 80, aggression: 0.55, status: 'running' },
+      { id: 'ai_3_' + raceId, team: 'Lotus AI', position: 4, reliability: 78, currentReliability: 78, aggression: 0.7, status: 'running' }
     ];
 
-    const engine = new RaceEngine(demoCars, 20, raceSeed());
-    activeRaces.set(raceId, { engine, userId, carId, circuitName });
+    // Create the engine and wire up events
+    const engine = new RaceEngine(demoCars, 20, Math.floor(Math.random() * 1000000));
+    activeRaces.set(raceId, { engine, userId, carId: playerCarId, circuitName });
 
     engine.on('lap', (data) => {
-      io.emit('race:lap', { raceId, ...data });
+      try {
+        io.emit('race:lap', { raceId, ...data });
+      } catch (e) { console.error('Emit race:lap error', e); }
     });
 
     engine.on('event', (data) => {
-      io.emit('race:event', { raceId, ...data });
+      try {
+        io.emit('race:event', { raceId, ...data });
+      } catch (e) { console.error('Emit race:event error', e); }
     });
 
     engine.on('end', (result) => {
-      io.emit('race:end', { raceId, ...result });
+      try {
+        io.emit('race:end', { raceId, ...result });
+      } catch (e) { console.error('Emit race:end error', e); }
       activeRaces.delete(raceId);
     });
 
-    engine.start();
-    res.json({ raceId, circuitName, laps: 20 });
+    // start engine (defensive)
+    try {
+      engine.start();
+    } catch (e) {
+      console.error('Engine start failed', e);
+      activeRaces.delete(raceId);
+      return res.status(500).json({ error: 'Failed to start engine', detail: String(e) });
+    }
+
+    res.json({ raceId, circuitName: circuitName || 'Unknown', laps: 20, carId: playerCarId });
   } catch (e) {
     console.error('Race start error:', e);
-    res.status(500).json({ error: 'Failed to start race' });
+    res.status(500).json({ error: 'Failed to start race', detail: String(e) });
   }
 });
 
 app.post('/api/race/:raceId/decision', verifyToken, (req, res) => {
-  const { decision } = req.body;
-  const data = activeRaces.get(req.params.raceId);
-  if (data) {
-    data.engine.applyDecision(decision);
-    res.json({ success: true });
-  } else {
-    res.status(404).json({ error: 'Race not found' });
+  try {
+    const { decision } = req.body || {};
+    const data = activeRaces.get(req.params.raceId);
+    if (data) {
+      try {
+        data.engine.applyDecision(decision);
+        res.json({ success: true });
+      } catch (e) {
+        console.error('Apply decision failed', e);
+        res.status(500).json({ error: 'Failed to apply decision', detail: String(e) });
+      }
+    } else {
+      res.status(404).json({ error: 'Race not found' });
+    }
+  } catch (e) {
+    console.error('Decision handler error', e);
+    res.status(500).json({ error: 'Decision failed', detail: String(e) });
   }
 });
 
