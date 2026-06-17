@@ -1,0 +1,17 @@
+{
+  "name": "f1-manager-tycoon-1970",
+  "description": "F1 Manager Tycoon 1970-1980 Game",
+  "repository": "https://github.com/Elio-byte/F1ManagerTycoon1970_alpha1",
+  "keywords": ["game", "f1", "racing"],
+  "buildpacks": [
+    {
+      "url": "heroku/nodejs"
+    }
+  ],
+  "env": {
+    "JWT_SECRET": {
+      "description": "Secret key for JWT tokens",
+      "value": "change-me-in-production"
+    }
+  }
+}

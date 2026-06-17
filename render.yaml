@@ -1,0 +1,12 @@
+{
+  "version": "0.1.0",
+  "build": {
+    "commands": [
+      "npm install",
+      "npm run prisma:generate"
+    ],
+    "commandPath": "npm"
+  },
+  "startCommand": "npm start",
+  "envPrefix": "PROCESS_ENV_"
+}
