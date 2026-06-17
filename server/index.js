@@ -186,6 +186,11 @@ app.get('/', (req, res) => {
   res.sendFile(path.join(__dirname, '../public/index.html'));
 });
 
+// Lightweight landing for slow connections
+app.get('/lite', (req, res) => {
+  res.sendFile(path.join(__dirname, '../public/lite.html'));
+});
+
 // ========== SOCKET.IO ==========
 io.on('connection', (socket) => {
   console.log('[Socket] Client connected:', socket.id);
