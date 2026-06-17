@@ -1,0 +1,104 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id        String   @id @default(cuid())
+  email     String   @unique
+  passwordHash String
+  verified  Boolean  @default(false)
+  language  String   @default("en")
+  createdAt DateTime @default(now())
+  teams     Team[]
+  races     RaceResult[]
+}
+
+model Team {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name      String
+  colorPrimary String @default("#FF0000")
+  colorSecondary String @default("#FFFFFF")
+  baseReliability Int @default(75)
+  budget    Int      @default(10000000)
+  cars      Car[]
+  createdAt DateTime @default(now())
+}
+
+model Car {
+  id        String   @id @default(cuid())
+  teamId    String
+  team      Team     @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  year      Int      @default(1975)
+  currentReliability Int @default(85)
+  damageLevel Int     @default(0)
+  raceResults RaceResult[]
+  createdAt DateTime @default(now())
+}
+
+model Circuit {
+  id        String   @id @default(cuid())
+  name      String   @unique
+  year      Int
+  laps      Int      @default(20)
+  lengthKm  Float    @default(5.0)
+  svgPath   String
+  races     Race[]
+}
+
+model Season {
+  id        String   @id @default(cuid())
+  year      Int      @unique
+  races     Race[]
+  createdAt DateTime @default(now())
+}
+
+model Race {
+  id        String   @id @default(cuid())
+  seasonId  String
+  season    Season   @relation(fields: [seasonId], references: [id], onDelete: Cascade)
+  circuitId String
+  circuit   Circuit  @relation(fields: [circuitId], references: [id])
+  date      DateTime
+  status    String   @default("scheduled") // scheduled, qualifying, race, finished
+  results   RaceResult[]
+  events    RaceEvent[]
+  createdAt DateTime @default(now())
+}
+
+model RaceResult {
+  id        String   @id @default(cuid())
+  raceId    String
+  race      Race     @relation(fields: [raceId], references: [id], onDelete: Cascade)
+  carId     String
+  car       Car      @relation(fields: [carId], references: [id], onDelete: Cascade)
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  startingPosition Int
+  finishingPosition Int?
+  points    Int      @default(0)
+  finalReliability Int
+  avgSpeed  Float    @default(0)
+  pits      Int      @default(0)
+  retired   Boolean  @default(false)
+  retirementReason String?
+  createdAt DateTime @default(now())
+}
+
+model RaceEvent {
+  id        String   @id @default(cuid())
+  raceId    String
+  race      Race     @relation(fields: [raceId], references: [id], onDelete: Cascade)
+  lap       Int
+  type      String   // mechanical, puncture, weather, debris, engine_blow, safety_car
+  severity  Int
+  affectedCarId String?
+  description String
+  createdAt DateTime @default(now())
+}

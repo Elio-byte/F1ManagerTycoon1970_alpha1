@@ -1,20 +1,27 @@
 {
   "name": "f1managertycoon1970-alpha",
-  "version": "0.1.0",
-  "description": "Minimal scaffold for F1 Manager Tycoon 1970 (Alpha)",
-  "main": "server.js",
+  "version": "0.2.0",
+  "description": "F1 Manager Tycoon 1970 - Full Game Alpha",
+  "main": "build/server/index.js",
+  "type": "module",
   "scripts": {
-    "start": "node server.js"
+    "dev": "node server/index.js",
+    "start": "node server/index.js",
+    "build": "npm run prisma:generate",
+    "prisma:generate": "prisma generate"
   },
   "author": "Elio-byte",
   "license": "MIT",
   "dependencies": {
+    "@prisma/client": "^5.3.0",
     "bcrypt": "^5.1.0",
-    "body-parser": "^1.20.2",
     "cors": "^2.8.5",
     "express": "^4.18.2",
     "jsonwebtoken": "^9.0.0",
     "nodemailer": "^6.9.3",
     "socket.io": "^4.7.2"
+  },
+  "engines": {
+    "node": ">=16.0.0"
   }
 }

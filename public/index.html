@@ -1,59 +1,14 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="utf-8" />
+  <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>F1 Manager Tycoon 1970 - Alpha</title>
-  <style>
-    body { font-family: system-ui, Arial, sans-serif; margin: 16px; }
-    header { display:flex; gap:12px; align-items:center; }
-    #map { width: 100%; height: 200px; border: 1px solid #ccc; margin-top: 12px; }
-    .car-marker { r: 8; stroke: #222; stroke-width: 1; }
-    #events { max-height: 200px; overflow:auto; border:1px solid #eee; padding:8px; }
-  </style>
+  <title>F1 Manager Tycoon 1970-1980</title>
+  <link rel="stylesheet" href="/style.css" />
 </head>
 <body>
-  <header>
-    <h1 id="title">F1 CEO 1970–1980 (Alpha)</h1>
-    <div>
-      <label for="lang">Language</label>
-      <select id="lang">
-        <option value="en">English</option>
-        <option value="es">Español</option>
-      </select>
-    </div>
-  </header>
-
-  <section>
-    <h2 id="auth-title">Register (demo)</h2>
-    <form id="register-form">
-      <input type="email" id="email" placeholder="email@example.com" required />
-      <input type="password" id="password" placeholder="password" required />
-      <button type="submit" id="register-btn">Register</button>
-    </form>
-    <p id="register-msg"></p>
-  </section>
-
-  <section style="margin-top:12px">
-    <button id="start-race">Start Demo Race</button>
-  </section>
-
-  <section>
-    <h3>Race map</h3>
-    <svg id="map" viewBox="0 0 1000 200" preserveAspectRatio="none">
-      <!-- simple track line -->
-      <path id="track" d="M20 100 Q 200 20 400 100 T 980 100" stroke="#888" stroke-width="6" fill="none" />
-      <!-- markers will be added here -->
-    </svg>
-  </section>
-
-  <section>
-    <h3>Events</h3>
-    <div id="events"></div>
-  </section>
-
+  <div id="root"></div>
   <script src="/socket.io/socket.io.js"></script>
-  <script src="https://unpkg.com/i18next@22.4.9/dist/umd/i18next.min.js"></script>
-  <script src="client.js"></script>
+  <script type="module" src="/app.jsx"></script>
 </body>
 </html>
