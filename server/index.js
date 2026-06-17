@@ -213,22 +213,29 @@ app.post('/api/race/start', verifyToken, (req, res) => {
 
     // Create the engine and wire up events
     const engine = new RaceEngine(demoCars, 20, Math.floor(Math.random() * 1000000));
-    activeRaces.set(raceId, { engine, userId, carId: playerCarId, circuitName });
+    const raceData = { engine, userId, carId: playerCarId, circuitName, latest: { lap: 0, cars: demoCars.map(c => ({ id: c.id, team: c.team, position: c.position, reliability: Math.round(c.currentReliability), status: c.status })), events: [] } };
+    activeRaces.set(raceId, raceData);
 
     engine.on('lap', (data) => {
       try {
+        // update latest snapshot
+        raceData.latest.lap = data.lap;
+        raceData.latest.cars = data.cars;
         io.emit('race:lap', { raceId, ...data });
       } catch (e) { console.error('Emit race:lap error', e); }
     });
 
     engine.on('event', (data) => {
       try {
+        raceData.latest.events.unshift(data);
+        if (raceData.latest.events.length > 50) raceData.latest.events.pop();
         io.emit('race:event', { raceId, ...data });
       } catch (e) { console.error('Emit race:event error', e); }
     });
 
     engine.on('end', (result) => {
       try {
+        raceData.latest.cars = result.cars;
         io.emit('race:end', { raceId, ...result });
       } catch (e) { console.error('Emit race:end error', e); }
       activeRaces.delete(raceId);
@@ -247,6 +254,19 @@ app.post('/api/race/start', verifyToken, (req, res) => {
   } catch (e) {
     console.error('Race start error:', e);
     res.status(500).json({ error: 'Failed to start race', detail: String(e) });
+  }
+});
+
+// Polling/status endpoint for clients that can't use sockets
+app.get('/api/race/:raceId/status', (req, res) => {
+  try {
+    const raceId = req.params.raceId;
+    const data = activeRaces.get(raceId);
+    if (!data) return res.status(404).json({ error: 'Race not found' });
+    return res.json({ raceId, ...data.latest });
+  } catch (e) {
+    console.error('Status endpoint error', e);
+    res.status(500).json({ error: 'Failed to get status', detail: String(e) });
   }
 });
 

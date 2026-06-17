@@ -109,6 +109,7 @@ let raceActive = false;
 let raceData = { cars: [], events: [], lap: 0 };
 let socket = null;
 let socketConnected = false;
+let pollInterval = null;
 
 // Initialize socket safely
 (function initSocket(){
@@ -119,11 +120,12 @@ let socketConnected = false;
   }
   try {
     socket = io();
-    socket.on('connect', () => { socketConnected = true; console.log('[Socket] connected', socket.id); render(); });
-    socket.on('connect_error', (err) => { console.warn('[Socket] connect_error', err); });
+    socket.on('connect', () => { socketConnected = true; console.log('[Socket] connected', socket.id); stopPolling(); render(); });
+    socket.on('connect_error', (err) => { console.warn('[Socket] connect_error', err); startPolling(); });
   } catch (e) {
     console.warn('Socket init failed', e);
     socket = null;
+    startPolling();
   }
 })();
 
@@ -152,8 +154,37 @@ function applyingSocketHandlers(){
     if (raceData.raceId && data.raceId && data.raceId !== raceData.raceId) return;
     raceActive = false;
     raceData.cars = data.cars;
+    stopPolling();
     render();
   });
+}
+
+function startPolling() {
+  if (pollInterval) return;
+  if (!raceData.raceId) return;
+  pollInterval = setInterval(async () => {
+    try {
+      const res = await fetch(API + '/api/race/' + raceData.raceId + '/status');
+      if (!res.ok) return;
+      const json = await res.json();
+      raceData.lap = json.lap;
+      raceData.cars = json.cars;
+      // convert events to strings for display if needed
+      if (json.events) {
+        raceData.events = json.events.map(e => `Lap ${e.lap}: ${e.team} - ${e.type}`);
+      }
+      render();
+    } catch (e) {
+      console.warn('Polling failed', e);
+    }
+  }, 1500);
+}
+
+function stopPolling() {
+  if (pollInterval) {
+    clearInterval(pollInterval);
+    pollInterval = null;
+  }
 }
 
 function t(key) {
@@ -250,6 +281,8 @@ async function startRace() {
     if (json.raceId) {
       raceActive = true;
       raceData = { cars: [], events: [], lap: 0, raceId: json.raceId };
+      // if sockets are unavailable, start polling
+      if (!socket || !socketConnected) startPolling();
       render();
     } else {
       alert(json.error || 'Failed to start race');
@@ -261,6 +294,7 @@ async function startRace() {
 
 async function makeDecision(decision) {
   try {
+    if (!raceData.raceId) return;
     await fetch(API + '/api/race/' + raceData.raceId + '/decision', {
       method: 'POST',
       headers: { 'authorization': 'Bearer ' + token, 'content-type': 'application/json' },
